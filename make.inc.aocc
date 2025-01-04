@@ -1,0 +1,19 @@
+CC=mpicc
+CXX=mpicxx
+FC=mpif90
+
+CXXFLAGS=-std=gnu++14 -O2 -g -fopenmp
+FORTRAN_LIB=-L/opt/AMD/aocc-compiler-5.0.0/lib -lflang -lflangrti -lpgmath
+
+OPENMPI_F_LIB=-L/opt/openmpi/5.0.5/aocc/lib -lmpi_mpifh
+
+LIB_DIR=/opt/AMD/aocl-linux-aocc-5.0.0/5.0.0/aocc/lib
+BLAS_LIB=-lblis
+LAPACK_LIB=-lflame
+SCALAPACK_LIB=-lscalapack
+MATH_LIB=-lalm -lamdlibm -laoclutils -lm
+
+NTPOLY_DIR=/opt/NTPoly/3.1.1/openmpi-aocc-aocl/lib
+NTPOLY_INC=/opt/NTPoly/3.1.1/openmpi-aocc-aocl/include
+NTPOLY_LIB=-lNTPolyCPP -lNTPolyWrapper -lNTPoly
+
