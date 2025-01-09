@@ -62,7 +62,7 @@ int loadParametersFromFile(const std::string& filename,
 int saveTripletListToFile(const NTPoly::TripletList_r& tripletList, const std::string& filename);
 
 // Function to save a local matrix to a file
-int saveLocalMatrixToFile(const int N, double* matrix, const std::string& filename);
+int saveLocalMatrixToFile(const int narows, const int nacols, double* matrix, const std::string& filename);
 
 // Function to save a Block Cyclic Distributed (BCD) matrix to a file
 int saveBCDMatrixToFile(const MPI_Comm comm, const int* desc, const int nrow, const int ncol, const double* matrix, const std::string& filename);

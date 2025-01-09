@@ -150,14 +150,14 @@ int saveTripletListToFile(const NTPoly::TripletList_r& tripletList, const std::s
 }
 
 /**
- * Saves a local matrix (column major) to a file.
+ * Saves a local matrix (column major!) to a file.
  * 
  * @param N The dimension of the matrix.
  * @param matrix The local matrix to be saved.
  * @param filename The name of the file to which the matrix will be saved.
  * @return Returns 0 if successful, or an error code if an error occurs.
  */
-int saveLocalMatrixToFile(const int N, double* matrix, const std::string& filename)
+int saveLocalMatrixToFile(const int narows, const int nacols, double* matrix, const std::string& filename)
 {
     std::ofstream outfile(filename);
     if (!outfile.is_open())
@@ -165,11 +165,11 @@ int saveLocalMatrixToFile(const int N, double* matrix, const std::string& filena
         std::cerr << "Error: Could not open file " << filename << std::endl;
         return 1;
     }
-    for (int i=0; i<N; ++i) // i is the row index, j is the column index
+    for (int i=0; i<narows; ++i) // i is the row index, j is the column index
     {
-        for (int j=0; j<N; ++j)
+        for (int j=0; j<nacols; ++j)
         {
-            outfile << matrix[i+j*N] << " "; // attention: this is a column major matrix
+            outfile << matrix[i+j*narows] << " "; // attention: this is a column major matrix
         }
         outfile << std::endl;
     }
