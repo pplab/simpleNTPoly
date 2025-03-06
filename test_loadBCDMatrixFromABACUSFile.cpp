@@ -2,6 +2,15 @@
 #include <string>
 #include <fstream>
 #include <mpi.h>
+#include <ProcessGrid.h>
+#include <PSMatrix.h>
+#include <TripletList.h>
+#include <Triplet.h>
+#include <Permutation.h>
+#include <SolverParameters.h>
+#include <SquareRootSolvers.h>
+#include <DensityMatrixSolvers.h>
+#include "simple_ntpoly.h"
 #include "utils.hpp"
 #include "Cblacs.h"
 
@@ -47,6 +56,17 @@ int main(int argc, char** argv)
     saveLocalMatrixToFile(narows, nacols, H, "H_"+std::to_string(myid)+".dat");
 
     saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, H, "H_final.dat");
+
+    // transform BCD Matrix to NTPoly PSMatrix
+    
+    // init default process grid
+    int process_slice=1;
+    NTPoly::ConstructGlobalProcessGrid(MPI_COMM_WORLD, process_slice);
+    NTPoly::Matrix_ps Hamiltonian(nFull);
+    double threshold=1e-10;
+    ntpoly::constructPSMatrixFromBCD(Hamiltonian, MPI_COMM_WORLD, desc, narows, nacols, H, threshold);
+    ntpoly::constructBCDFromPSMatrix(Hamiltonian, MPI_COMM_WORLD, desc, narows, nacols, H);
+    saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, H, "H_final2.dat");
     MPI_Finalize();
     return 0;
 }

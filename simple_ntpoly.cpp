@@ -129,7 +129,7 @@ namespace ntpoly
         NTPoly::DensityMatrixSolvers::TRS2(Hamiltonian, ISQOverlap, trace, 
                         Density, energy, chemical_potential, solver_parameters);
         Density.Scale(spin_degeneracy);
-        energy *= spin_degeneracy;
+        energy = spin_degeneracy;
         
         if(for_debug) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "Density Matrix is done");
         {
@@ -142,7 +142,7 @@ namespace ntpoly
         {
             //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "Density Matrix is converted to BCD format");
             outlog("Density Matrix is converted to BCD format");
-            saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, DM, "DM.dat");
+            //saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, DM, "DM.dat");
         } 
 
         // Solve the Energy Density Matrix
@@ -157,7 +157,7 @@ namespace ntpoly
         {
             //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "EnergyDensity Matrix is converted to BCD format");            
             outlog("EnergyDensity Matrix is converted to BCD format");
-            saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, EDM, "EDM.dat");
+            //saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, EDM, "EDM.dat");
         }
         return 0;
     }
@@ -276,20 +276,34 @@ namespace ntpoly
             //"enter constructBCDFromPSMatrix, nblk is", nblk);
         {
             outlog("enter constructBCDFromPSMatrix, nblk is", nblk);
+            // save PSM to local tripletlist file
+            int myid;
+            MPI_Comm_rank(comm_2D, &myid);
+            NTPoly::TripletList_r local_DM_tripletList;
+            PSM.GetTripletList(local_DM_tripletList);
+            std::string local_tripletList_filename="local_DM_tripletList_"+std::to_string(myid)+".txt";
+            saveTripletListToFile(local_DM_tripletList, local_tripletList_filename);
         }
         // gather matrix elements of current process to a tripletlist from the PSMatrix
         // and then fill the BCD matrix
         NTPoly::TripletList_r tripletList;
         for(int i=0; i<nrow; i+=nblk)
         {
-            const int start_row=i;
+            const int start_row=globalIndex(i, nblk, nprow, myprow)+1; // start_row is the global index and of fortran format
             const int end_row=std::min(i+nblk, nrow);
             for(int j=0; j<ncol; j+=nblk)
             {
-                const int start_col=j;
+                const int start_col=globalIndex(j, nblk, npcol, mypcol)+1; // start_col is the global index and of fortran format
                 const int end_col=std::min(j+nblk, ncol);
                 PSM.GetMatrixBlock(tripletList, start_row, end_row, start_col, end_col);
-
+                if(for_debug)
+                {
+                    outlog("GetMatrixBlock, start_row is", start_row);
+                    outlog("GetMatrixBlock, end_row is", end_row);
+                    outlog("GetMatrixBlock, start_col is", start_col);
+                    outlog("GetMatrixBlock, end_col is", end_col);
+                    outlog("GetMatrixBlock, number non-zero element is", tripletList.GetSize());
+                }
                 // fill the BCD matrix
                 for(int k=0; k<tripletList.GetSize(); ++k)
                 {

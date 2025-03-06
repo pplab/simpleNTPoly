@@ -48,8 +48,8 @@ int main(int argc, char** argv)
     loadBCDMatrixFromABACUSFile("data-0-H", MPI_COMM_WORLD, desc, H);
     loadBCDMatrixFromABACUSFile("data-0-S", MPI_COMM_WORLD, desc, S);
     outlog("H and S are loaded");
-    saveLocalMatrixToFile(nFull, H, "H_"+std::to_string(myid)+".dat");
-    saveLocalMatrixToFile(nFull, S, "S_"+std::to_string(myid)+".dat");
+    saveLocalMatrixToFile(narows, nacols, H, "H_"+std::to_string(myid)+".dat");
+    saveLocalMatrixToFile(narows, nacols, S, "S_"+std::to_string(myid)+".dat");
     saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, H, "H_save.dat");
     saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, S, "S_save.dat");
 
@@ -62,6 +62,7 @@ int main(int argc, char** argv)
                 nelec, nspin, H, S, 
                 DM, EDM, energy, chemical_potential);
     
+    saveLocalMatrixToFile(narows, nacols, DM, "DM_"+std::to_string(myid)+".dat");
     saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, DM, "DM.dat");
     delete[] H;
     delete[] S;
