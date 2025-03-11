@@ -45,7 +45,9 @@ int main(int argc, char** argv)
 
     double* H = new double[narows * nacols];
     double* S = new double[narows * nacols];
+    outlog("start loading H");
     loadBCDMatrixFromABACUSFile("data-0-H", MPI_COMM_WORLD, desc, H);
+    outlog("start loading S");
     loadBCDMatrixFromABACUSFile("data-0-S", MPI_COMM_WORLD, desc, S);
     outlog("H and S are loaded");
     saveLocalMatrixToFile(narows, nacols, H, "H_"+std::to_string(myid)+".dat");
@@ -56,12 +58,13 @@ int main(int argc, char** argv)
     double* DM = new double[narows * nacols];
     double* EDM = new double[narows * nacols];
     double energy, chemical_potential;
+    outlog("start ntpoly solving");
     ntpoly::simple_ntpoly(MPI_COMM_WORLD, desc, 
                 narows, nacols,
                 converge_density, converge_overlap, threshold, 
                 nelec, nspin, H, S, 
                 DM, EDM, energy, chemical_potential);
-    
+    outlog("ntpoly solving finished");
     saveLocalMatrixToFile(narows, nacols, DM, "DM_"+std::to_string(myid)+".dat");
     saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, DM, "DM.dat");
     delete[] H;

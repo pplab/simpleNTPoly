@@ -59,7 +59,7 @@ namespace ntpoly
             saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, S, "S.dat");
         }
         // init default process grid
-        int process_slice=1;
+        int process_slice=2;
         if(require_init_NTPOLY)
         {
             NTPoly::ConstructGlobalProcessGrid(comm_2D, process_slice);
@@ -95,10 +95,12 @@ namespace ntpoly
         if(for_debug)
         {
             outlog("H and S are converted to PSMatrix");
+            Hamiltonian.WriteToMatrixMarket("Hamiltonian.mtx");
+            Overlap.WriteToMatrixMarket("Overlap.mtx");
         }
 
         // set purmutation
-        NTPoly::Permutation permutation(nFull);
+        NTPoly::Permutation permutation(Hamiltonian.GetLogicalDimension());
         permutation.SetRandomPermutation();
 
         if(for_debug) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "permutation is done");
@@ -134,6 +136,7 @@ namespace ntpoly
         if(for_debug) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "Density Matrix is done");
         {
             outlog("Density Matrix is done");
+            Density.WriteToMatrixMarket("DM.mtx");
         }
         // convert DM from the PSMatrix to a BCD matrix
         constructBCDFromPSMatrix(Density, comm_2D, desc, nrow, ncol, DM);
@@ -269,6 +272,7 @@ namespace ntpoly
         const int nrow, const int ncol, double M[])
     {
         int blacs_context=desc[1];
+        const int nFull=desc[2];  
         const int nblk=desc[4];
         int nprow, npcol, myprow, mypcol;
         Cblacs_gridinfo(blacs_context, &nprow, &npcol, &myprow, &mypcol);
@@ -276,6 +280,8 @@ namespace ntpoly
             //"enter constructBCDFromPSMatrix, nblk is", nblk);
         {
             outlog("enter constructBCDFromPSMatrix, nblk is", nblk);
+            outlog("nprow is "+std::to_string(nprow)+" npcol is " +std::to_string(npcol));
+            outlog("myprow is "+std::to_string(myprow)+" mypcol is " +std::to_string(mypcol));
             // save PSM to local tripletlist file
             int myid;
             MPI_Comm_rank(comm_2D, &myid);
@@ -284,24 +290,30 @@ namespace ntpoly
             std::string local_tripletList_filename="local_DM_tripletList_"+std::to_string(myid)+".txt";
             saveTripletListToFile(local_DM_tripletList, local_tripletList_filename);
         }
+        // count how many times the getMatrixBlock should be called
+        int max_count=0;
+        int my_count=((nrow-1)/nblk+1)*((ncol-1)/nblk+1);
+        MPI_Allreduce(&my_count, &max_count, 1, MPI_INT, MPI_MAX, comm_2D);
+
         // gather matrix elements of current process to a tripletlist from the PSMatrix
         // and then fill the BCD matrix
         NTPoly::TripletList_r tripletList;
         for(int i=0; i<nrow; i+=nblk)
         {
-            const int start_row=globalIndex(i, nblk, nprow, myprow)+1; // start_row is the global index and of fortran format
-            const int end_row=std::min(i+nblk, nrow);
+            const int start_row=globalIndex(i, nblk, nprow, myprow); // start_row is the global index
+            const int end_row=std::min(start_row+nblk, nFull);
             for(int j=0; j<ncol; j+=nblk)
             {
-                const int start_col=globalIndex(j, nblk, npcol, mypcol)+1; // start_col is the global index and of fortran format
-                const int end_col=std::min(j+nblk, ncol);
-                PSM.GetMatrixBlock(tripletList, start_row, end_row, start_col, end_col);
+                const int start_col=globalIndex(j, nblk, npcol, mypcol); // start_col is the global index
+                const int end_col=std::min(start_col+nblk, nFull);
+                // The c++ interface of the NTPoly has already transformed the matrix index into Fortran format, which is one-based.
+                // ref: PSMatrix.cc, line 132
+                PSM.GetMatrixBlock(tripletList, start_row, end_row, start_col, end_col);                 
                 if(for_debug)
                 {
-                    outlog("GetMatrixBlock, start_row is", start_row);
-                    outlog("GetMatrixBlock, end_row is", end_row);
-                    outlog("GetMatrixBlock, start_col is", start_col);
-                    outlog("GetMatrixBlock, end_col is", end_col);
+                    outlog("GetMatrixBlock, i is "+std::to_string(i)+" j is "+std::to_string(j));
+                    outlog("GetMatrixBlock, start_row is "+std::to_string(start_row)+" end_row is "+std::to_string(end_row));
+                    outlog("GetMatrixBlock, start_col is "+std::to_string(start_col)+" end_col is "+std::to_string(end_col));
                     outlog("GetMatrixBlock, number non-zero element is", tripletList.GetSize());
                 }
                 // fill the BCD matrix
@@ -313,9 +325,26 @@ namespace ntpoly
                     const int lRow=localIndex(gRow, nblk, nprow, myprow);
                     const int lCol=localIndex(gCol, nblk, npcol, mypcol);
                     const int idx=lRow+lCol*nrow;
+                    if(for_debug)
+                    {
+                        // outlog("tripletList tmp_t["+std::to_string(gRow)+", "+std::to_string(gCol)+"] = "+std::to_string(tmp_t.point_value));
+                        // outlog("fill BCD Matrix, M("+std::to_string(lRow)+", "+std::to_string(lCol)+
+                        //      ")("+std::to_string(idx)+")= "+std::to_string(tmp_t.point_value));
+                        outlog("tmp_t["+std::to_string(gRow)+", "+std::to_string(gCol)+"] = "+std::to_string(tmp_t.point_value)+
+                                " ==> M("+std::to_string(lRow)+", "+std::to_string(lCol)+")(idx: "+std::to_string(idx)+")= "+std::to_string(tmp_t.point_value));
+                    }
                     M[idx]=tmp_t.point_value;
                 }
             }
+        }
+        // some processes may still require some elements to be filled
+        for(int i=0; i<max_count-my_count; ++i)
+        {
+            const int start_row=1;
+            const int end_row=1;
+            const int start_col=1;
+            const int end_col=1;
+            PSM.GetMatrixBlock(tripletList, start_row, end_row, start_col, end_col);
         }
         return 0;
     }

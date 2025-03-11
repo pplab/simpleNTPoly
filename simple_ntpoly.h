@@ -106,12 +106,12 @@ static inline int globalIndex(const int localIndex, const int nblk, const int np
  * @param globalIndex The global index within the entire distributed matrix.
  * @param nblk The number of elements in each block.
  * @param nprocs The total number of process rows or columns.
- * @param lcoalProc The rank of the process row or column to which the local index belongs.
+ * @param localProc The rank of the process row or column to which the local index belongs.
  * @return The local index corresponding to the given global index.
  */
-static inline int localIndex(const int globalIndex, const int nblk, const int nprocs, int& lcoalProc)
+static inline int localIndex(const int globalIndex, const int nblk, const int nprocs, int& localProc)
 {
-    lcoalProc = int((globalIndex % (nblk * nprocs)) / nblk);
+    localProc = int((globalIndex % (nblk * nprocs)) / nblk);
     return int(globalIndex / (nblk * nprocs)) * nblk + globalIndex % nblk;
 }
 }
