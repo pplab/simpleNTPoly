@@ -131,7 +131,6 @@ namespace ntpoly
         NTPoly::DensityMatrixSolvers::TRS2(Hamiltonian, ISQOverlap, trace, 
                         Density, energy, chemical_potential, solver_parameters);
         Density.Scale(spin_degeneracy);
-        energy = spin_degeneracy;
         
         if(for_debug) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "Density Matrix is done");
         {
@@ -256,7 +255,7 @@ namespace ntpoly
         return 0;
     }
 
-    /**
+        /**
      * Constructs a Block Cyclic Distributed (BCD) matrix from a PSMatrix.
      *
      * @param PSM The PSMatrix to be converted.
@@ -267,7 +266,146 @@ namespace ntpoly
      * @param M The BCD matrix to be filled.
      * @return Returns 0 if successful, or an error code if an error occurs.
      */
-    int constructBCDFromPSMatrix(NTPoly::Matrix_ps& PSM, 
+    int constructBCDFromPSMatrix(NTPoly::Matrix_ps& PSM,
+        const MPI_Comm comm_2D, const int desc[],
+        const int nrow, const int ncol, double M[])
+    {
+        int blacs_context=desc[1];
+        const int nFull=desc[2];
+        const int nblk=desc[4];
+        int nprow, npcol, myprow, mypcol;
+        Cblacs_gridinfo(blacs_context, &nprow, &npcol, &myprow, &mypcol);
+
+        // matrix are transformed within the process slice
+        // setup slice parameters
+        const int my_slice=NTPoly::GetGlobalMySlice();
+        int myid, nproc;
+        MPI_Comm_size(comm_2D, &nproc);
+        MPI_Comm_rank(comm_2D, &myid);
+        static MPI_Comm comm_2D_slice;
+        static MPI_Group group_2D_slice;
+        static MPI_Group group_2D;
+        static std::vector<int> rank_slice;
+        static int nproc_slice;
+        rank_slice.resize(nproc);
+        if(require_init_NTPOLY)
+        {
+            // create communicators and groups within each slice
+            MPI_Comm_split(comm_2D, my_slice, myid, &comm_2D_slice);
+            MPI_Comm_group(comm_2D_slice, &group_2D_slice);
+            MPI_Comm_group(comm_2D, &group_2D);
+            // findout the relationship between global communicator and local slice communicator
+            for(int i=0; i<nproc; ++i)
+            {
+                rank_slice[i]=-1;
+            }
+            MPI_Comm_size(comm_2D_slice, &nproc_slice);
+            int rank_list_slice[nproc_slice];
+            int glocal_rank_list_slice[nproc_slice];
+            for(int i=0; i<nproc_slice; ++i)
+            {
+                rank_list_slice[i]=i;
+            }            
+            MPI_Group_translate_ranks(group_2D_slice, nproc_slice, rank_list_slice, group_2D, glocal_rank_list_slice);
+            for(int i=0; i<nproc_slice; ++i)
+            {
+                rank_slice[glocal_rank_list_slice[i]]=i;
+            }
+        }
+        // transform PSMatrix to local tripletlist
+        int n_send_element; // number of elements to be sent
+        int n_recv_element; // number of elements to be received
+        NTPoly::TripletList_r local_tripletList;
+        PSM.GetTripletList(local_tripletList);
+        n_send_element=local_tripletList.GetSize();
+        // count number of elements to be sent to each process
+        std::vector<int> send_count(nproc_slice, 0);
+        NTPoly::Triplet_r tmp_t;
+        for(int i=0; i<n_send_element; ++i) 
+        {
+            tmp_t=local_tripletList.GetTripletAt(i);
+            int local_row_idx=tmp_t.index_row-1;
+            int local_col_idx=tmp_t.index_column-1;
+            int global_row_idx=globalIndex(local_row_idx, nblk, nprow, myprow);
+            int global_col_idx=globalIndex(local_col_idx, nblk, npcol, mypcol);
+            int recv_rank=Cblacs_pnum(blacs_context, global_row_idx, global_col_idx);
+            int recv_rank_slice=rank_slice[recv_rank];
+            if(recv_rank_slice>=0) send_count[recv_rank_slice]++;
+        }
+        // build sender and receiver parameters for mpi_alltoallv
+        std::vector<int> recv_count(nproc_slice);
+        MPI_Alltoall(send_count.data(), 1, MPI_INT, recv_count.data(), 1, MPI_INT, comm_2D_slice);
+        std::vector<int> send_displ(nproc_slice);
+        std::vector<int> recv_displ(nproc_slice);
+        send_displ[0]=0;
+        recv_displ[0]=0;
+        n_recv_element=recv_count[0];
+        for(int i=1; i<nproc_slice; ++i)
+        {
+            send_displ[i]=send_displ[i-1]+send_count[i-1];
+            recv_displ[i]=recv_displ[i-1]+recv_count[i-1];
+            n_recv_element+=recv_count[i];
+        }
+        // fill local elements and their index to send_data, send_row_index and send_col_index
+        std::vector<double> send_data(n_send_element);
+        std::vector<int> send_row_index(n_send_element);
+        std::vector<int> send_col_index(n_send_element);
+        std::vector<int> p_fill_to_send(nproc_slice, 0);
+        for(int i=0; i<n_send_element; ++i)
+        {
+            tmp_t=local_tripletList.GetTripletAt(i);
+            int local_row_idx=tmp_t.index_row-1;
+            int local_col_idx=tmp_t.index_column-1;
+            int global_row_idx=globalIndex(local_row_idx, nblk, nprow, myprow);
+            int global_col_idx=globalIndex(local_col_idx, nblk, npcol, mypcol);
+            int recv_rank=Cblacs_pnum(blacs_context, global_row_idx, global_col_idx);
+            int recv_rank_slice=rank_slice[recv_rank];
+            int t_idx=send_displ[recv_rank_slice]+p_fill_to_send[recv_rank_slice];
+            p_fill_to_send[recv_rank_slice]++;
+            send_data[t_idx]=tmp_t.point_value;
+            send_row_index[t_idx]=global_row_idx;
+            send_col_index[t_idx]=global_col_idx;
+        }
+        // call MPI_Alltoallv to send elements to each process        
+        std::vector<double> recv_data(n_recv_element);
+        std::vector<int> recv_row_index(n_recv_element);
+        std::vector<int> recv_col_index(n_recv_element);
+        MPI_Request requests[3];
+        MPI_Ialltoallv(send_data.data(), send_count.data(), send_displ.data(), MPI_DOUBLE,
+            recv_data.data(), recv_count.data(), recv_displ.data(), MPI_DOUBLE, comm_2D_slice, &requests[0]);
+        MPI_Ialltoallv(send_row_index.data(), send_count.data(), send_displ.data(), MPI_INT,
+            recv_row_index.data(), recv_count.data(), recv_displ.data(), MPI_INT, comm_2D_slice, &requests[1]);
+        MPI_Ialltoallv(send_col_index.data(), send_count.data(), send_displ.data(), MPI_INT,
+            recv_col_index.data(), recv_count.data(), recv_displ.data(), MPI_INT, comm_2D_slice, &requests[2]);
+        MPI_Waitall(3, requests, MPI_STATUS_IGNORE);
+        // fill received elements index to BCD Matrix
+        for(int i=0; i<n_recv_element; ++i)
+        {
+            int global_row_idx=recv_row_index[i];
+            int global_col_idx=recv_col_index[i];
+            int local_row_idx=localIndex(global_row_idx, nblk, nprow, myprow);
+            int local_col_idx=localIndex(global_col_idx, nblk, npcol, mypcol);
+            int local_idx=local_row_idx*ncol+local_col_idx;
+            M[local_idx]=recv_data[i];
+        }
+        return 0;
+    }
+
+    /**
+     * Constructs a Block Cyclic Distributed (BCD) matrix from a PSMatrix.
+     * Use NTPoly transform function 
+     * It has some issues, the matrix is not exactly the same as the original matrix,
+     * and the performance is poor for big matrix with small nblk
+     *
+     * @param PSM The PSMatrix to be converted.
+     * @param comm_2D The MPI communicator for the 2D grid.
+     * @param desc The descriptor array for the BCD matrix.
+     * @param nrow The number of rows in the local matrix.
+     * @param ncol The number of columns in the local matrix.
+     * @param M The BCD matrix to be filled.
+     * @return Returns 0 if successful, or an error code if an error occurs.
+     */
+    int constructBCDFromPSMatrix_NTPoly(NTPoly::Matrix_ps& PSM, 
         const MPI_Comm comm_2D, const int desc[],
         const int nrow, const int ncol, double M[])
     {
