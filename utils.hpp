@@ -44,6 +44,62 @@ static inline void outlog(const std::string& str, const T num)
     outfile.close();
 }
 
+static inline void saveArrayToFile(const std::string& file_prefix, const double* array, int size)
+{
+    int myid;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    std::string filename = file_prefix + "_" + std::to_string(myid) + ".dat";
+    std::ofstream outfile(filename);
+    if (!outfile.is_open())
+    {
+        std::cerr << "Error: Could not open file " << filename << std::endl;
+        return;
+    }
+    for (int i = 0; i < size; ++i)
+    {
+        outfile << array[i] << std::endl;
+    }
+    outfile.close();    
+}
+
+static inline void saveArrayToFile(const std::string& file_prefix, const int* array, int size)
+{
+    int myid;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    std::string filename = file_prefix + "_" + std::to_string(myid) + ".dat";
+    std::ofstream outfile(filename);
+    if (!outfile.is_open())
+    {
+        std::cerr << "Error: Could not open file " << filename << std::endl;
+    }
+    for (int i = 0; i < size; ++i)
+    {
+        outfile << array[i] << std::endl;
+    }
+    outfile.close();
+}
+
+static inline void saveMatrixToFile(const std::string& file_prefix, const double* matrix, int rows, int cols)
+{
+    int myid;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    std::string filename = file_prefix + "_" + std::to_string(myid) + ".dat";
+    std::ofstream outfile(filename);
+    if (!outfile.is_open())
+    {
+        std::cerr << "Error: Could not open file " << filename << std::endl;
+        return;
+    }
+    for (int i = 0; i < rows; ++i)
+    {
+        for (int j = 0; j < cols; ++j)
+        {
+            outfile << matrix[i * cols + j] << " ";
+        }
+    }
+    outfile.close();
+}
+
 // Function to initialize the BLACS grid
 void initBlacsGrid(MPI_Comm comm, int nFull, int nblk,
                    int& blacs_ctxt, int& narows, int& nacols, int* desc);

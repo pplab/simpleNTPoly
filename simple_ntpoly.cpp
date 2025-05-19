@@ -144,7 +144,7 @@ namespace ntpoly
         {
             //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "Density Matrix is converted to BCD format");
             outlog("Density Matrix is converted to BCD format");
-            //saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, DM, "DM.dat");
+            saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, DM, "DM.dat");
         } 
 
         // Solve the Energy Density Matrix
@@ -159,7 +159,7 @@ namespace ntpoly
         {
             //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "EnergyDensity Matrix is converted to BCD format");            
             outlog("EnergyDensity Matrix is converted to BCD format");
-            //saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, EDM, "EDM.dat");
+            saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, EDM, "EDM.dat");
         }
         return 0;
     }
@@ -287,14 +287,22 @@ namespace ntpoly
         static MPI_Group group_2D;
         static std::vector<int> rank_slice;
         static int nproc_slice;
-        rank_slice.resize(nproc);
-        if(require_init_NTPOLY)
+        if(for_debug) // ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, 
+        {
+            outlog("Enter constructBCDFromPSMatrix, my slice is", my_slice);
+        }
+        if(require_init_comm_silce)
         {
             // create communicators and groups within each slice
             MPI_Comm_split(comm_2D, my_slice, myid, &comm_2D_slice);
             MPI_Comm_group(comm_2D_slice, &group_2D_slice);
             MPI_Comm_group(comm_2D, &group_2D);
+            if(for_debug) // ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, 
+            {
+                outlog("comm_2D is constructed");
+            }
             // findout the relationship between global communicator and local slice communicator
+            rank_slice.resize(nproc);
             for(int i=0; i<nproc; ++i)
             {
                 rank_slice[i]=-1;
@@ -307,10 +315,20 @@ namespace ntpoly
                 rank_list_slice[i]=i;
             }            
             MPI_Group_translate_ranks(group_2D_slice, nproc_slice, rank_list_slice, group_2D, glocal_rank_list_slice);
+            if(for_debug) // ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, 
+            {
+                outlog("MPI_Group_translate_ranks is called");
+            }
             for(int i=0; i<nproc_slice; ++i)
             {
                 rank_slice[glocal_rank_list_slice[i]]=i;
+                outlog("rank_slice["+std::to_string(glocal_rank_list_slice[i])+ "] ="+ std::to_string(i));
             }
+            if(for_debug) // ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, 
+            {
+                outlog("All processes are split to slices, nproc in current slice is", nproc_slice);
+            }
+            require_init_comm_silce=false;
         }
         // transform PSMatrix to local tripletlist
         int n_send_element; // number of elements to be sent
@@ -321,20 +339,41 @@ namespace ntpoly
         // count number of elements to be sent to each process
         std::vector<int> send_count(nproc_slice, 0);
         NTPoly::Triplet_r tmp_t;
+        int local_prow, local_pcol;
         for(int i=0; i<n_send_element; ++i) 
         {
             tmp_t=local_tripletList.GetTripletAt(i);
-            int local_row_idx=tmp_t.index_row-1;
-            int local_col_idx=tmp_t.index_column-1;
-            int global_row_idx=globalIndex(local_row_idx, nblk, nprow, myprow);
-            int global_col_idx=globalIndex(local_col_idx, nblk, npcol, mypcol);
-            int recv_rank=Cblacs_pnum(blacs_context, global_row_idx, global_col_idx);
+            int global_row_idx=tmp_t.index_row-1;
+            int global_col_idx=tmp_t.index_column-1;
+            int local_row_idx=localIndex(global_row_idx, nblk, nprow, local_prow);
+            int local_col_idx=localIndex(global_col_idx, nblk, npcol, local_pcol);
+            int recv_rank=Cblacs_pnum(blacs_context, local_prow, local_pcol);
             int recv_rank_slice=rank_slice[recv_rank];
             if(recv_rank_slice>=0) send_count[recv_rank_slice]++;
+            
+            // outlog("global_row_idx is " + std::to_string(global_row_idx) + 
+            //        ", global_col_idx is " + std::to_string(global_col_idx) + 
+            //        ", local_prow is " + std::to_string(local_prow) +
+            //        ", local_pcol is " + std::to_string(local_pcol) +
+            //        ", recv_rank is " + std::to_string(recv_rank) + 
+            //        ", recv_rank_slice is " + std::to_string(recv_rank_slice));
         }
         // build sender and receiver parameters for mpi_alltoallv
-        std::vector<int> recv_count(nproc_slice);
-        MPI_Alltoall(send_count.data(), 1, MPI_INT, recv_count.data(), 1, MPI_INT, comm_2D_slice);
+        std::vector<int> recv_count(nproc_slice, 0);
+        if(for_debug) 
+        {         
+            outlog("nproc_slice is", nproc_slice); 
+            saveArrayToFile("send_count_before", send_count.data(), nproc_slice);
+            saveArrayToFile("recv_count_before", recv_count.data(), nproc_slice);
+        }
+        //MPI_Alltoall(send_count.data(), nproc_slice, MPI_INT, recv_count.data(), nproc_slice, MPI_INT, comm_2D_slice);
+        MPI_Alltoall(&send_count[0], nproc_slice, MPI_INT, &recv_count[0], nproc_slice, MPI_INT, comm_2D_slice);
+        if(for_debug) 
+        {         
+            outlog("nproc_slice is", nproc_slice); 
+            saveArrayToFile("send_count", send_count.data(), nproc_slice);
+            saveArrayToFile("recv_count", recv_count.data(), nproc_slice);
+        }
         std::vector<int> send_displ(nproc_slice);
         std::vector<int> recv_displ(nproc_slice);
         send_displ[0]=0;
@@ -346,6 +385,14 @@ namespace ntpoly
             recv_displ[i]=recv_displ[i-1]+recv_count[i-1];
             n_recv_element+=recv_count[i];
         }
+        if(for_debug) 
+        {
+            outlog("n_send_element is", n_send_element);
+            outlog("n_recv_element is", n_recv_element);            
+            saveArrayToFile("send_displ", send_displ.data(), nproc_slice);
+            saveArrayToFile("recv_displ", recv_displ.data(), nproc_slice);
+        }
+
         // fill local elements and their index to send_data, send_row_index and send_col_index
         std::vector<double> send_data(n_send_element);
         std::vector<int> send_row_index(n_send_element);
@@ -360,24 +407,39 @@ namespace ntpoly
             int global_col_idx=globalIndex(local_col_idx, nblk, npcol, mypcol);
             int recv_rank=Cblacs_pnum(blacs_context, global_row_idx, global_col_idx);
             int recv_rank_slice=rank_slice[recv_rank];
-            int t_idx=send_displ[recv_rank_slice]+p_fill_to_send[recv_rank_slice];
-            p_fill_to_send[recv_rank_slice]++;
-            send_data[t_idx]=tmp_t.point_value;
-            send_row_index[t_idx]=global_row_idx;
-            send_col_index[t_idx]=global_col_idx;
+            if(recv_rank_slice>=0)
+            {
+                int t_idx=send_displ[recv_rank_slice]+p_fill_to_send[recv_rank_slice];
+                p_fill_to_send[recv_rank_slice]++;
+                send_data[t_idx]=tmp_t.point_value;
+                send_row_index[t_idx]=global_row_idx;
+                send_col_index[t_idx]=global_col_idx;
+            }
+        }
+        if(for_debug) 
+        {
+            outlog("send_data is filled");
+            saveArrayToFile("send_data", send_data.data(), n_send_element);
+            saveArrayToFile("send_row_index", send_row_index.data(), n_send_element);
+            saveArrayToFile("send_col_index", send_col_index.data(), n_send_element);
         }
         // call MPI_Alltoallv to send elements to each process        
         std::vector<double> recv_data(n_recv_element);
         std::vector<int> recv_row_index(n_recv_element);
         std::vector<int> recv_col_index(n_recv_element);
-        MPI_Request requests[3];
-        MPI_Ialltoallv(send_data.data(), send_count.data(), send_displ.data(), MPI_DOUBLE,
-            recv_data.data(), recv_count.data(), recv_displ.data(), MPI_DOUBLE, comm_2D_slice, &requests[0]);
-        MPI_Ialltoallv(send_row_index.data(), send_count.data(), send_displ.data(), MPI_INT,
-            recv_row_index.data(), recv_count.data(), recv_displ.data(), MPI_INT, comm_2D_slice, &requests[1]);
-        MPI_Ialltoallv(send_col_index.data(), send_count.data(), send_displ.data(), MPI_INT,
-            recv_col_index.data(), recv_count.data(), recv_displ.data(), MPI_INT, comm_2D_slice, &requests[2]);
-        MPI_Waitall(3, requests, MPI_STATUS_IGNORE);
+        MPI_Alltoallv(send_data.data(), send_count.data(), send_displ.data(), MPI_DOUBLE,
+            recv_data.data(), recv_count.data(), recv_displ.data(), MPI_DOUBLE, comm_2D_slice);
+        MPI_Alltoallv(send_row_index.data(), send_count.data(), send_displ.data(), MPI_INT,
+            recv_row_index.data(), recv_count.data(), recv_displ.data(), MPI_INT, comm_2D_slice);
+        MPI_Alltoallv(send_col_index.data(), send_count.data(), send_displ.data(), MPI_INT,
+            recv_col_index.data(), recv_count.data(), recv_displ.data(), MPI_INT, comm_2D_slice);
+        if(for_debug) 
+        {
+            outlog("elements are exchanged between processes");
+            saveArrayToFile("recv_data", recv_data.data(), n_recv_element);
+            saveArrayToFile("recv_row_index", recv_row_index.data(), n_recv_element);
+            saveArrayToFile("recv_col_index", recv_col_index.data(), n_recv_element);
+        }
         // fill received elements index to BCD Matrix
         for(int i=0; i<n_recv_element; ++i)
         {
@@ -387,6 +449,10 @@ namespace ntpoly
             int local_col_idx=localIndex(global_col_idx, nblk, npcol, mypcol);
             int local_idx=local_row_idx*ncol+local_col_idx;
             M[local_idx]=recv_data[i];
+        }
+        if(for_debug) 
+        {
+            outlog("received elements are filled to BCD Matrix");
         }
         return 0;
     }
