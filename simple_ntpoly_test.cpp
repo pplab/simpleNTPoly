@@ -2,6 +2,7 @@
 #include <mpi.h>
 #include "utils.hpp"
 #include "simple_ntpoly.h"
+#include <vector>  // 引入 vector 头文件
 
 int main(int argc, char** argv)
 {
@@ -43,34 +44,55 @@ int main(int argc, char** argv)
     int desc[9];
     initBlacsGrid(MPI_COMM_WORLD, nFull, 2, blacs_ctxt, narows, nacols, desc);
 
-    double* H = new double[narows * nacols];
-    double* S = new double[narows * nacols];
+    // 使用 std::vector<double> 替代 double*
+    std::vector<double> H(narows * nacols);
+    std::vector<double> S(narows * nacols);
     outlog("start loading H");
-    loadBCDMatrixFromABACUSFile("data-0-H", MPI_COMM_WORLD, desc, H);
+    loadBCDMatrixFromABACUSFile("data-0-H", MPI_COMM_WORLD, desc, H.data());
     outlog("start loading S");
-    loadBCDMatrixFromABACUSFile("data-0-S", MPI_COMM_WORLD, desc, S);
+    loadBCDMatrixFromABACUSFile("data-0-S", MPI_COMM_WORLD, desc, S.data());
     outlog("H and S are loaded");
-    saveLocalMatrixToFile(narows, nacols, H, "H_"+std::to_string(myid)+".dat");
-    saveLocalMatrixToFile(narows, nacols, S, "S_"+std::to_string(myid)+".dat");
-    saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, H, "H_save.dat");
-    saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, S, "S_save.dat");
+    saveLocalMatrixToFile(narows, nacols, H.data(), "H_"+std::to_string(myid)+".dat");
+    saveLocalMatrixToFile(narows, nacols, S.data(), "S_"+std::to_string(myid)+".dat");
+    saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, H.data(), "H_save.dat");
+    saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, S.data(), "S_save.dat");
 
-    double* DM = new double[narows * nacols];
-    double* EDM = new double[narows * nacols];
+    // 使用 std::vector<double> 替代 double*
+    std::vector<double> DM(narows * nacols);
+    std::vector<double> EDM(narows * nacols);
     double energy, chemical_potential;
+
+    // 打印调用前的指针地址，使用 outlog 替代 std::cout
+    outlog("Before ntpoly::simple_ntpoly - DM address: ", DM.data());
+    outlog("Before ntpoly::simple_ntpoly - EDM address: ", EDM.data());
+
     outlog("start ntpoly solving");
     ntpoly::simple_ntpoly(MPI_COMM_WORLD, desc, 
                 narows, nacols,
                 converge_density, converge_overlap, threshold, 
-                nelec, nspin, H, S, 
-                DM, EDM, energy, chemical_potential);
+                nelec, nspin, H.data(), S.data(), 
+                DM.data(), EDM.data(), energy, chemical_potential);
+
+    // 打印调用后的指针地址，使用 outlog 替代 std::cout
+    outlog("After ntpoly::simple_ntpoly - DM address: ", DM.data());
+    outlog("After ntpoly::simple_ntpoly - EDM address: ", EDM.data());
+
+    MPI_Barrier(MPI_COMM_WORLD);
     outlog("ntpoly solving finished");
-    saveLocalMatrixToFile(narows, nacols, DM, "DM_"+std::to_string(myid)+".dat");
-    saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, DM, "DM.dat");
-    delete[] H;
-    delete[] S;
-    delete[] DM;
-    delete[] EDM;
+    //saveLocalMatrixToFile(narows, nacols, DM.data(), "DM_"+std::to_string(myid)+".dat");
+    //saveLocalMatrixToFile(narows, nacols, EDM.data(), "EDM_"+std::to_string(myid)+".dat");
+    saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, DM.data(), "DM.dat");
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (myid == 0)
+    {
+        std::cout<<"energy="<<energy<<"\n";
+        std::cout<<"chemical_potential="<<chemical_potential<<"\n";
+    }
+    // 无需手动 delete[]，vector 会自动管理内存
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    // ntpoly::cleanupMPIResources();
+    outlog("finished");
     MPI_Finalize();
     return 0;
 }
