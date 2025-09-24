@@ -101,7 +101,7 @@ static inline void saveMatrixToFile(const std::string& file_prefix, const double
 }
 
 // Function to initialize the BLACS grid
-void initBlacsGrid(MPI_Comm comm, int nFull, int nblk,
+void initBlacsGrid(MPI_Comm comm, const char BLACS_LAYOUT, int nFull, int nblk,
                    int& blacs_ctxt, int& narows, int& nacols, int* desc);
 
 // Function to save parameters to a file

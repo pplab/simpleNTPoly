@@ -42,7 +42,7 @@ int main(int argc, char** argv)
     int blacs_ctxt;
     int narows, nacols;
     int desc[9];
-    initBlacsGrid(MPI_COMM_WORLD, nFull, 2, blacs_ctxt, narows, nacols, desc);
+    initBlacsGrid(MPI_COMM_WORLD, 'R', nFull, 2, blacs_ctxt, narows, nacols, desc);
 
     // 使用 std::vector<double> 替代 double*
     std::vector<double> H(narows * nacols);
@@ -67,7 +67,7 @@ int main(int argc, char** argv)
     outlog("Before ntpoly::simple_ntpoly - EDM address: ", EDM.data());
 
     outlog("start ntpoly solving");
-    ntpoly::simple_ntpoly(MPI_COMM_WORLD, desc, 
+    ntpoly::simple_ntpoly(MPI_COMM_WORLD, 'R', desc, 
                 narows, nacols,
                 converge_density, converge_overlap, threshold, 
                 nelec, nspin, H.data(), S.data(), 

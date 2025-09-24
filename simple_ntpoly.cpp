@@ -311,7 +311,7 @@ namespace ntpoly
      * @param chemical_potential The chemical potential.
      * @return Returns 0 if successful, or an error code if an error occurs.
      */
-    int simple_ntpoly(const MPI_Comm comm_2D, const int desc[], 
+    int simple_ntpoly(const MPI_Comm comm_2D, const char LAYOUT, const int desc[], 
         const int nrow, const int ncol, 
         const double converge_density, const double converge_overlap, const double threshold, 
         const int nelec, const int nspin, const double H[], const double S[], 
@@ -410,6 +410,7 @@ namespace ntpoly
         if(for_debug) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "ISQOverlap is done");
         {
             outlog("ISQOverlap is done");
+            ISQOverlap.WriteToMatrixMarket("ISQOverlap.mtx");
         }
 
         // Solve the Density Matrix.
@@ -427,7 +428,7 @@ namespace ntpoly
             Density.WriteToMatrixMarket("DM.mtx");
         }
         // convert DM from the PSMatrix to a BCD matrix
-        constructBCDFromPSMatrix(Density, comm_2D, 'C', desc, nrow, ncol, DM);
+        constructBCDFromPSMatrix(Density, comm_2D, LAYOUT, desc, nrow, ncol, DM);
 
         if(for_debug)
         {
@@ -453,7 +454,7 @@ namespace ntpoly
             EnergyDensity.WriteToMatrixMarket("EDM.mtx");
         }
 
-        constructBCDFromPSMatrix(EnergyDensity, comm_2D, 'C', desc, nrow, ncol, EDM);
+        constructBCDFromPSMatrix(EnergyDensity, comm_2D, LAYOUT, desc, nrow, ncol, EDM);
         if(for_debug) 
         {
             //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "EnergyDensity Matrix is converted to BCD format");            

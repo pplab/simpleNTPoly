@@ -28,10 +28,10 @@ extern "C"
  * @param nacols A reference to an integer where the number of local columns will be stored.
  * @param desc A pointer to an array of integers used to store the matrix descriptor.
  */
-void initBlacsGrid(MPI_Comm comm, int nFull, int nblk,
+void initBlacsGrid(MPI_Comm comm, const char BLACS_LAYOUT, int nFull, int nblk,
                    int& blacs_ctxt, int& narows, int& nacols, int* desc)
 {
-    char BLACS_LAYOUT='C';
+    char LAYOUT;
     int ISRCPROC=0; 
     int nprows, npcols;
     int myprow, mypcol;
@@ -40,17 +40,30 @@ void initBlacsGrid(MPI_Comm comm, int nFull, int nblk,
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &myid);
     // set blacs parameters
-    for(npcols=int(sqrt(double(nprocs))); npcols>=2; --npcols)
+    nprows=static_cast<int>(std::sqrt(double(nprocs+0.5)));
+    while(npcols = nprocs/nprows, nprows*npcols!=nprocs)
     {
-        if(nprocs%npcols==0) break;
+        --nprows;
     }
-    nprows=nprocs/npcols;
+    
     outlog("nprows", nprows);
     outlog("npcols", npcols);
 
     //int comm_f = MPI_Comm_c2f(comm);
+    if(BLACS_LAYOUT=='R'||BLACS_LAYOUT=='r')
+    {
+        LAYOUT='R';
+    }
+    else if(BLACS_LAYOUT=='C'||BLACS_LAYOUT=='c')
+    {
+        LAYOUT='C';
+    }
+    else
+    {
+        std::cerr<<"Error: BLACS_LAYOUT must be 'R' or 'C'";
+    }
     blacs_ctxt=Csys2blacs_handle(comm);
-    Cblacs_gridinit(&blacs_ctxt, &BLACS_LAYOUT, nprows, npcols);
+    Cblacs_gridinit(&blacs_ctxt, &LAYOUT, nprows, npcols);
     Cblacs_gridinfo(blacs_ctxt, &nprows, &npcols, &myprow, &mypcol);
 
     narows=numroc_(&nFull, &nblk, &myprow, &ISRCPROC, &nprows);
