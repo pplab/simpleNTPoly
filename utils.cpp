@@ -396,7 +396,7 @@ int loadBCDMatrixFromABACUSFile(const std::string& filename, const MPI_Comm comm
         // read the matrix to b
         int tmp;
         matrixFile>>tmp;
-        std::cout<<"nFull="<<tmp<<"\n";
+        // std::cout<<"nFull="<<tmp<<"\n";
         double val;
         for(int i=0; i<N; ++i)
         {
