@@ -112,7 +112,7 @@ int saveParametersToFile(const std::string& filename,
 // Function to load parameters from a file
 int loadParametersFromFile(const std::string& filename,
         int& nFull, int& nelec, int& nspin, 
-        double& converge_density, double& converge_overlap, double& threshold);
+        double& converge_density, double& converge_overlap, double& threshold, int& verbose_level);
 
 // Function to save a TripletList to a file
 int saveTripletListToFile(const NTPoly::TripletList_r& tripletList, const std::string& filename);

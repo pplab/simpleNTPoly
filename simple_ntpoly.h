@@ -6,7 +6,7 @@
 #include <PSMatrix.h>
 namespace ntpoly
 {
-   const bool for_debug=true;
+   static bool for_debug=false;
 /**
  * Main function for performing NTPoly calculations.
  *
@@ -32,7 +32,8 @@ int simple_ntpoly(const MPI_Comm comm_2D, const char LAYOUT, const int desc[],
     const double converge_density, const double converge_overlap, const double threshold, 
     const int nelec, const int nspin, const double H[], const double S[], 
     double DM[], double EDM[], 
-    double& energy, double& chemical_potential);
+    double& energy, double& chemical_potential,
+    int verbose_level);
 
 /**
  * Constructs a PSMatrix from a Block Cyclic Distributed (BCD) matrix.

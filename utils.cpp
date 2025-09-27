@@ -46,8 +46,8 @@ void initBlacsGrid(MPI_Comm comm, const char BLACS_LAYOUT, int nFull, int nblk,
         --nprows;
     }
     
-    outlog("nprows", nprows);
-    outlog("npcols", npcols);
+    // outlog("nprows", nprows);
+    // outlog("npcols", npcols);
 
     //int comm_f = MPI_Comm_c2f(comm);
     if(BLACS_LAYOUT=='R'||BLACS_LAYOUT=='r')
@@ -67,11 +67,11 @@ void initBlacsGrid(MPI_Comm comm, const char BLACS_LAYOUT, int nFull, int nblk,
     Cblacs_gridinfo(blacs_ctxt, &nprows, &npcols, &myprow, &mypcol);
 
     narows=numroc_(&nFull, &nblk, &myprow, &ISRCPROC, &nprows);
-    outlog("narows", narows);
+    // outlog("narows", narows);
     nacols=numroc_(&nFull, &nblk, &mypcol, &ISRCPROC, &npcols);
-    outlog("nacols", nacols);
+    // outlog("nacols", nacols);
     descinit_(desc, &nFull, &nFull, &nblk, &nblk, &ISRCPROC, &ISRCPROC, &blacs_ctxt, &narows, &info);
-    if(true)
+    if(false)
     {
         outlog("BLACS context initialized", blacs_ctxt);
         outlog("Descriptor initialized with nFull " +std::to_string(nFull) + 
@@ -163,7 +163,8 @@ int saveParametersToFile(const std::string& filename,
  */
 int loadParametersFromFile(const std::string& filename,
         int& nFull, int& nelec, int& nspin, 
-        double& converge_density, double& converge_overlap, double& threshold)
+        double& converge_density, double& converge_overlap, double& threshold,
+        int& verbose_level)
 {
     std::ifstream infile(filename);
     if (!infile.is_open())
@@ -201,6 +202,10 @@ int loadParametersFromFile(const std::string& filename,
             else if (key == "threshold")
             {
                 iss >> threshold;
+            }
+            else if (key == "verbose_level")
+            {
+                iss >> verbose_level;
             }
         }
     }

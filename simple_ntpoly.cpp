@@ -14,6 +14,7 @@
 #include "simple_ntpoly.h"
 //#include "module_base/global_function.h"
 #include "utils.hpp"
+#include "timer.hpp"
 
 namespace ntpoly
 {
@@ -177,7 +178,7 @@ namespace ntpoly
             int recv_rank=my_pnum(BLACS_LAYOUT, blacs_context, local_prow, local_pcol);
             
             // check process grid information
-            static bool _check=true;
+            static bool _check=for_debug;
             if(_check)
             {
                 for(int i=0; i<nprow; ++i)
@@ -279,14 +280,17 @@ namespace ntpoly
                 // Establish a mapping from global communicator ranks to ranks within the slice
                 for(int i=0; i<nproc_slice; ++i)
                 {
-                    rank_slice[glocal_rank_list_slice[i]]=i;
-                    outlog("rank_slice["+std::to_string(glocal_rank_list_slice[i])+ "] ="+ std::to_string(i));
+                    rank_slice[glocal_rank_list_slice[i]]=i;                    
                 }
 
                 // Debug information, output the number of processes in the current slice
                 if(for_debug) 
                 {
                     outlog("All processes are split to slices, nproc in current slice is", nproc_slice);
+                    for(int i=0; i<nproc_slice; ++i)
+                    {
+                        outlog("rank_slice["+std::to_string(glocal_rank_list_slice[i])+ "] ="+ std::to_string(i));
+                    }
                 }
             }
         }
@@ -316,9 +320,13 @@ namespace ntpoly
         const double converge_density, const double converge_overlap, const double threshold, 
         const int nelec, const int nspin, const double H[], const double S[], 
         double DM[], double EDM[], 
-        double& energy, double& chemical_potential)
+        double& energy, double& chemical_potential, const int verbose_level)
     {
         const int nFull=desc[2];
+        if(verbose_level>3)
+            for_debug=true;
+        MPITimer timer;
+        // check input parameters
         if(for_debug) 
         {
             //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "enter simple_ntpoly, nFull", nFull);
@@ -372,17 +380,30 @@ namespace ntpoly
         }
 
         // convert H and S from BCD matrix to PSMatrix
+        if(verbose_level>0)
+        {
+            outlog("start to convert H and S from BCD matrix to PSMatrix");
+            timer.start();
+        }
         constructPSMatrixFromBCD(Hamiltonian, comm_2D, desc, nrow, ncol, H, threshold);
-        constructPSMatrixFromBCD(Overlap, comm_2D, desc, nrow, ncol, S, threshold);        
+        constructPSMatrixFromBCD(Overlap, comm_2D, desc, nrow, ncol, S, threshold);
+        if(verbose_level>0)
+        {
+            outlog("conversion is done, time used:", timer.stop());
+        }
         //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "H and S are converted to PSMatrix");
         if(for_debug)
         {
-            outlog("H and S are converted to PSMatrix");
             Hamiltonian.WriteToMatrixMarket("Hamiltonian.mtx");
             Overlap.WriteToMatrixMarket("Overlap.mtx");
         }
 
         // set permutation
+        if(verbose_level>0)
+        {
+            outlog("start to do permutation");
+            timer.start();
+        }
         const int perm_dim = Hamiltonian.GetLogicalDimension();
         outlog("Permutation dimension: ", perm_dim);
         if (perm_dim <= 0) {
@@ -392,9 +413,9 @@ namespace ntpoly
         NTPoly::Permutation permutation(perm_dim);
         permutation.SetRandomPermutation();
 
-        if(for_debug) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "permutation is done");
+        if(verbose_level>0) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "permutation is done");
         {
-            outlog("permutation is done");
+            outlog("permutation is done, time used:", timer.stop());
         }
 
         // set solver parameters 
@@ -405,11 +426,19 @@ namespace ntpoly
         solver_parameters.SetVerbosity(true);
         
         // InverseSquareRoot(Overlap, ISQOverlap, solver_parameters)
+        if(verbose_level>0)
+        {
+            outlog("start to do InverseSquareRoot of Overlap");
+            timer.start();
+        }
         NTPoly::SquareRootSolvers::InverseSquareRoot(Overlap, ISQOverlap, solver_parameters);
+        if(verbose_level>0)
+        {
+            outlog("ISQOverlap is done, time used:", timer.stop());
+        }
 
         if(for_debug) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "ISQOverlap is done");
         {
-            outlog("ISQOverlap is done");
             ISQOverlap.WriteToMatrixMarket("ISQOverlap.mtx");
         }
 
@@ -418,23 +447,39 @@ namespace ntpoly
         solver_parameters.SetConvergeDiff(converge_density);
         const double spin_degeneracy = nspin==1? 2.0: 1.0;
         const double trace=nelec/spin_degeneracy;
+        if(verbose_level>0)
+        {
+            outlog("start to solve the Density Matrix, spin_degeneracy=", spin_degeneracy);
+            timer.start();
+        }
         NTPoly::DensityMatrixSolvers::TRS2(Hamiltonian, ISQOverlap, trace, 
                         Density, energy, chemical_potential, solver_parameters);
+        if(verbose_level>0)
+        {
+            outlog("Density Matrix is solved, time used:", timer.stop());
+        }
         Density.Scale(spin_degeneracy);
         
         if(for_debug) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "Density Matrix is done");
         {
-            outlog("Density Matrix is done");
+            outlog("Density Matrix is scaled by spin_degeneracy=", spin_degeneracy);
             Density.WriteToMatrixMarket("DM.mtx");
         }
         // convert DM from the PSMatrix to a BCD matrix
+        if(verbose_level>0)
+        {
+            outlog("start to convert DM from PSMatrix to BCD matrix");
+            timer.start();
+        }
         constructBCDFromPSMatrix(Density, comm_2D, LAYOUT, desc, nrow, ncol, DM);
+        if(verbose_level>0)
+        {
+            outlog("conversion of DM is done, time used:", timer.stop());
+        }
 
         if(for_debug)
         {
-            //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "Density Matrix is converted to BCD format");
-            outlog("Density Matrix is converted to BCD format");
-            //saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, DM, "DM.dat");
+            saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, DM, "DM.dat");
             //saveMatrixToFile("DM", DM, nrow, ncol);
             MPI_Barrier(comm_2D);
             outlog("DM is saved to file DM.dat");
@@ -447,19 +492,35 @@ namespace ntpoly
             Hamiltonian.WriteToMatrixMarket("forEDM_Hamiltonian.mtx");
             Density.WriteToMatrixMarket("forEDM_Density.mtx");
         }
+        if(verbose_level>0)
+        {
+            outlog("start to solve the Energy Density Matrix");
+            timer.start();
+        }
         NTPoly::DensityMatrixSolvers::EnergyDensityMatrix(Hamiltonian, Density, EnergyDensity, threshold);
+        if(verbose_level>0)
+        {
+            outlog("EnergyDensity Matrix is done, time used:", timer.stop());
+        }
         if(for_debug) //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "EnergyDensity Matrix is done");
         {
-            outlog("EnergyDensity Matrix is done");
             EnergyDensity.WriteToMatrixMarket("EDM.mtx");
         }
 
+        // convert EDM from the PSMatrix to a BCD matrix
+        if(verbose_level>0)
+        {
+            outlog("start to convert EDM from PSMatrix to BCD matrix");
+            timer.start();
+        }
         constructBCDFromPSMatrix(EnergyDensity, comm_2D, LAYOUT, desc, nrow, ncol, EDM);
+        if(verbose_level>0)
+        {
+            outlog("conversion of EDM is done, time used:", timer.stop());
+        }
         if(for_debug) 
         {
-            //ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "EnergyDensity Matrix is converted to BCD format");            
-            outlog("EnergyDensity Matrix is converted to BCD format");
-            //saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, EDM, "EDM.dat");
+            saveBCDMatrixToFile(comm_2D, desc, nrow, ncol, EDM, "EDM.dat");
             //saveMatrixToFile("EDM", EDM, nrow, ncol);
         }
         return 0;
@@ -689,15 +750,15 @@ namespace ntpoly
                 if(local_col_idx>_max_col_idx[recv_rank_slice]) _max_col_idx[recv_rank_slice]=local_col_idx;
             }
         }
-        outlog("max row index and col index in each process slice:");
-        for(int i=0; i<nproc_slice; ++i)
-        {
-            outlog("Process slice " + std::to_string(i) 
-                + ": max row index = " + std::to_string(_max_row_idx[i])
-                + ": max col index = " + std::to_string(_max_col_idx[i]));
-        }
         if(for_debug) 
-        {
+        {            
+            outlog("max row index and col index in each process slice:");
+            for(int i=0; i<nproc_slice; ++i)
+            {
+                outlog("Process slice " + std::to_string(i) 
+                    + ": max row index = " + std::to_string(_max_row_idx[i])
+                    + ": max col index = " + std::to_string(_max_col_idx[i]));
+            }
             outlog("send_data is filled");
             saveArrayToFile("send_data", send_data.data(), n_send_element);
             saveArrayToFile("send_row_index", send_row_index.data(), n_send_element);

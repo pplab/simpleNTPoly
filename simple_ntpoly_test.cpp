@@ -2,6 +2,7 @@
 #include <mpi.h>
 #include "utils.hpp"
 #include "simple_ntpoly.h"
+#include "timer.hpp"
 #include <vector>  // 引入 vector 头文件
 
 int main(int argc, char** argv)
@@ -10,10 +11,13 @@ int main(int argc, char** argv)
     int myid;
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
     int nFull, nelec, nspin;
-    double converge_density, converge_overlap, threshold;
+    double converge_density, converge_overlap, threshold;    
+    int verbose_level=0;
+    MPITimer timer;
     if (myid == 0)
     {
-        loadParametersFromFile("parameters.txt", nFull, nelec, nspin, converge_density, converge_overlap, threshold);
+        loadParametersFromFile("parameters.txt", nFull, nelec, nspin, 
+                converge_density, converge_overlap, threshold, verbose_level);
         // std::cout<<"nFull: "<<nFull<<"\n";
         // std::cout<<"nelec: "<<nelec<<"\n";
         // std::cout<<"nspin: "<<nspin<<"\n";
@@ -28,17 +32,21 @@ int main(int argc, char** argv)
     MPI_Bcast(&converge_density, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(&converge_overlap, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(&threshold, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&verbose_level, 1, MPI_INT, 0, MPI_COMM_WORLD);
     // std::cout<<"myid="<<myid<<" converge_density="<<converge_density
     //          <<" converge_overlap="<<converge_overlap
     //          <<" threshold="<<threshold<<"\n";
-    outlog("parameters are broadcasted");
-    outlog("nFull", nFull);
-    outlog("nelec", nelec);
-    outlog("nspin", nspin);
-    outlog("converge_density", converge_density);
-    outlog("converge_overlap", converge_overlap);
-    outlog("threshold", threshold);
-
+    if(verbose_level>0)
+    {
+        outlog("parameters are broadcasted");
+        outlog("nFull", nFull);
+        outlog("nelec", nelec);
+        outlog("nspin", nspin);
+        outlog("converge_density", converge_density);
+        outlog("converge_overlap", converge_overlap);
+        outlog("threshold", threshold);
+        outlog("verbose_level", verbose_level);
+    }
     int blacs_ctxt;
     int narows, nacols;
     int desc[9];
@@ -47,52 +55,77 @@ int main(int argc, char** argv)
     // 使用 std::vector<double> 替代 double*
     std::vector<double> H(narows * nacols);
     std::vector<double> S(narows * nacols);
-    outlog("start loading H");
+    if(verbose_level>0)
+    {
+        outlog("start loading H");
+        timer.start();
+    }
     loadBCDMatrixFromABACUSFile("data-0-H", MPI_COMM_WORLD, desc, H.data());
-    outlog("start loading S");
+    if(verbose_level>0)
+    {
+        outlog("H loading time", timer.stop());
+    }
+    if(verbose_level>0)
+    {
+        outlog("start loading S");
+        timer.start();
+    }
     loadBCDMatrixFromABACUSFile("data-0-S", MPI_COMM_WORLD, desc, S.data());
-    outlog("H and S are loaded");
-    saveLocalMatrixToFile(narows, nacols, H.data(), "H_"+std::to_string(myid)+".dat");
-    saveLocalMatrixToFile(narows, nacols, S.data(), "S_"+std::to_string(myid)+".dat");
-    saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, H.data(), "H_save.dat");
-    saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, S.data(), "S_save.dat");
+    if(verbose_level>0)
+    {
+        outlog("S loading time", timer.stop()); 
+    }
+    if(verbose_level>2)
+    {
+        saveLocalMatrixToFile(narows, nacols, H.data(), "H_"+std::to_string(myid)+".dat");
+        saveLocalMatrixToFile(narows, nacols, S.data(), "S_"+std::to_string(myid)+".dat");
+        saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, H.data(), "H_save.dat");
+        saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, S.data(), "S_save.dat");
+    }
 
     // 使用 std::vector<double> 替代 double*
     std::vector<double> DM(narows * nacols);
     std::vector<double> EDM(narows * nacols);
     double energy, chemical_potential;
 
-    // 打印调用前的指针地址，使用 outlog 替代 std::cout
-    outlog("Before ntpoly::simple_ntpoly - DM address: ", DM.data());
-    outlog("Before ntpoly::simple_ntpoly - EDM address: ", EDM.data());
-
-    outlog("start ntpoly solving");
+    if(verbose_level>0)
+    {
+        outlog("start ntpoly solving");
+        timer.start();
+    }
     ntpoly::simple_ntpoly(MPI_COMM_WORLD, 'R', desc, 
                 narows, nacols,
                 converge_density, converge_overlap, threshold, 
                 nelec, nspin, H.data(), S.data(), 
-                DM.data(), EDM.data(), energy, chemical_potential);
+                DM.data(), EDM.data(), energy, chemical_potential, verbose_level);
 
-    // 打印调用后的指针地址，使用 outlog 替代 std::cout
-    outlog("After ntpoly::simple_ntpoly - DM address: ", DM.data());
-    outlog("After ntpoly::simple_ntpoly - EDM address: ", EDM.data());
+    if(verbose_level>0)
+    {
+        outlog("simple_ntpoly solving time", timer.stop());
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    outlog("ntpoly solving finished");
-    //saveLocalMatrixToFile(narows, nacols, DM.data(), "DM_"+std::to_string(myid)+".dat");
-    //saveLocalMatrixToFile(narows, nacols, EDM.data(), "EDM_"+std::to_string(myid)+".dat");
+    if(verbose_level>0)
+    {
+        outlog("ntpoly solving finished");
+        timer.start();
+    }
     saveBCDMatrixToFile(MPI_COMM_WORLD, desc, narows, nacols, DM.data(), "DM.dat");
+    if(verbose_level>0)
+    {
+        outlog("DM saving time", timer.stop());
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     if (myid == 0)
     {
         std::cout<<"energy="<<energy<<"\n";
         std::cout<<"chemical_potential="<<chemical_potential<<"\n";
     }
-    // 无需手动 delete[]，vector 会自动管理内存
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    // ntpoly::cleanupMPIResources();
-    outlog("finished");
+    
+    if(verbose_level>0)
+    {
+        outlog("finished");
+    }
     MPI_Finalize();
     return 0;
 }
