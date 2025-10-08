@@ -1,0 +1,18 @@
+CC=mpicc
+CXX=mpicxx
+FC=mpif90
+
+CXXFLAGS=-std=gnu++14 -O2 -g -fopenmp
+FORTRAN_LIB=-lflang -lflangrti -lpgmath
+
+OPENMPI_F_LIB=-lmpi_mpifh 
+
+BLAS_LIB=-lopenblas
+SCALAPACK_LIB=-L${HOME}/program/scalapack/bisheng_hmpi/lib -lscalapack
+MATH_LIB=-lm
+
+NTPOLY_INC=-I${HOME}/program/ntpoly/hpckit-bisheng-openblas/include
+NTPOLY_LIB=-L${HOME}/program/ntpoly/hpckit-bisheng-openblas/lib -lNTPolyCPP -lNTPolyWrapper -lNTPoly
+
+
+

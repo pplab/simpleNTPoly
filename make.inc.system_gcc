@@ -1,0 +1,17 @@
+CC=mpicc
+CXX=mpicxx
+FC=mpif90
+
+CXXFLAGS=-std=gnu++14 -O2 -g -fopenmp
+FORTRAN_LIB=-lgfortran
+
+OPENMPI_F_LIB=-lmpi_mpifh 
+
+BLAS_LIB=-lopenblas
+SCALAPACK_LIB=-L${HOME}/program/scalapack/system_gcc/lib -lscalapack
+
+NTPOLY_LIB=-L${HOME}/program/ntpoly/system_gcc/lib -lNTPolyCPP -lNTPolyWrapper -lNTPoly
+NTPOLY_INC=-I${HOME}/program/ntpoly/system_gcc/include
+
+
+

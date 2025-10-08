@@ -1,0 +1,22 @@
+CC=mpicc
+CXX=mpicxx
+FC=mpif90
+
+CXXFLAGS=-std=gnu++14 -O2 -g -fopenmp
+FORTRAN_LIB=-lgfortran
+
+OPENMPI_F_LIB=-lmpi_mpifh 
+
+LIB_DIR=${HOME}/program/HPCKit/latest/kml/gcc/lib/sve
+BLAS_LIB=-L${HOME}/program/HPCKit/latest/kml/gcc/lib/sve/kblas/multi -lkblas
+LAPACK_LIB=-lklapack_full
+SCALAPACK_LIB=-lkscalapack_full
+MATH_LIB=-L${HOME}/program/HPCKit/latest/kml/gcc/lib/noarch -lkm \
+ -L${HOME}/program/HPCKit/latest/compiler/gcc/lib64 -lgomp
+
+NTPOLY_LIB_DIR=${HOME}/program/ntpoly/hpckit-gcc/lib
+NTPOLY_INC=${HOME}/program/ntpoly/hpckit-gcc/include
+NTPOLY_LIB=-lNTPolyCPP -lNTPolyWrapper -lNTPoly
+
+
+

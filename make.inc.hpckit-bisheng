@@ -1,0 +1,19 @@
+CC=mpicc
+CXX=mpicxx
+FC=mpif90
+
+CXXFLAGS=-std=gnu++14 -O2 -g -fopenmp
+FORTRAN_LIB=-lflang -lflangrti -lpgmath
+
+OPENMPI_F_LIB=-lmpi_mpifh 
+
+BLAS_LIB=-L${HOME}/program/HPCKit/25.1.0/kml/bisheng/lib/sve/kblas/multi -lkblas
+LAPACK_LIB=-L${HOME}/program/HPCKit/25.1.0/kml/bisheng/lib/sve -lklapack_full
+SCALAPACK_LIB=-L${HOME}/program/HPCKit/25.1.0/kml/bisheng/lib/sve -lkscalapack_full
+MATH_LIB=-L${HOME}/program/HPCKit/25.1.0/kml/bisheng/lib/noarch/kvml/single -lkvml -L${HOME}/program/HPCKit/25.1.0/kml/bisheng/lib/noarch -lkm -lgomp 
+
+NTPOLY_INC=-I${HOME}/program/ntpoly/hpckit-bisheng/include
+NTPOLY_LIB=-L${HOME}/program/ntpoly/hpckit-bisheng/lib -lNTPolyCPP -lNTPolyWrapper -lNTPoly
+
+
+
